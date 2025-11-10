@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Field, FieldNode, FieldType, DocumentIdType } from "@/types";
-import { buildFieldTree, calculateDocumentSize, formatBytes, calculateDocumentPathSize, calculateFieldsSize } from "@/lib/firestore-size";
+import { buildFieldTree, calculateDocumentSize, formatBytes, calculateDocumentPathSize, calculateFieldsSize, getUtf8ByteLength } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,10 @@ const INITIAL_FIELDS: Field[] = [
 export default function FirestoreSizer() {
   const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
   const [multiplier, setMultiplier] = useState(1);
-  const [documentPath, setDocumentPath] = useState("users/some_user_id/posts/my_post_id");
+  const [collectionPath, setCollectionPath] = useState("users/some_user_id/posts");
+  const [documentIdType, setDocumentIdType] = useState<DocumentIdType>("custom-string");
+  const [customDocumentId, setCustomDocumentId] = useState("my_post_id");
+
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -89,7 +92,20 @@ export default function FirestoreSizer() {
 
   }, [singleFieldsTree, repeatedFieldsTree, multiplier]);
 
-  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(documentPath) + 32, [documentPath]);
+  const documentId = useMemo(() => {
+    if (documentIdType === 'auto') return 'ABCDEFGHIJKLMNOPQRST'; // 20 chars
+    if (documentIdType === 'custom-int') return '12345678'; // Example for size calc
+    return customDocumentId;
+  }, [documentIdType, customDocumentId]);
+
+  const documentIdSize = useMemo(() => {
+      if (documentIdType === 'custom-int') return 8;
+      return getUtf8ByteLength(documentId) + 1;
+  }, [documentId, documentIdType]);
+
+  const fullDocumentPath = useMemo(() => `${collectionPath}/${documentId}`, [collectionPath, documentId]);
+
+  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(fullDocumentPath) + 32, [fullDocumentPath]);
   const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
   const repeatedFieldsSize = useMemo(() => {
      if (multiplier > 0 && repeatedFieldsTree.length > 0) {
@@ -103,8 +119,8 @@ export default function FirestoreSizer() {
   }, [repeatedFieldsTree, multiplier]);
 
   const totalSize = useMemo(() => {
-    return calculateDocumentSize(documentPath, documentTree);
-  }, [documentPath, documentTree]);
+    return calculateDocumentSize(fullDocumentPath, documentTree);
+  }, [fullDocumentPath, documentTree]);
 
 
   const fieldHandlers = {
@@ -123,11 +139,42 @@ export default function FirestoreSizer() {
             </CardHeader>
             <CardContent className="space-y-6">
                 <div>
-                    <Label htmlFor="documentPath">Document Path</Label>
-                    <div className="flex items-center gap-2">
-                      <Input id="documentPath" value={documentPath} onChange={e => setDocumentPath(e.target.value)} placeholder="e.g., users/user_id/posts/post_id" />
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="collectionPath">Document Path</Label>
+                    <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateDocumentPathSize(collectionPath))}</div>
+                  </div>
+                  <Input id="collectionPath" value={collectionPath} onChange={e => setCollectionPath(e.target.value)} placeholder="e.g., users/user_id" />
+                  <p className="text-sm text-muted-foreground mt-1">The collection path leading to the document, e.g., `users/user_id`.</p>
+                </div>
+                 <div>
+                    <div className="flex justify-between items-center mb-2">
+                        <Label>Document ID</Label>
+                        <div className="text-sm font-medium text-muted-foreground">{formatBytes(documentIdSize)}</div>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">The full path to the document, including collection and document IDs.</p>
+                    <RadioGroup value={documentIdType} onValueChange={value => setDocumentIdType(value as DocumentIdType)} className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="auto" id="auto" />
+                            <Label htmlFor="auto" className="font-normal">Auto-generated ID</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="custom-string" id="custom-string" />
+                            <Label htmlFor="custom-string" className="font-normal">Custom String</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="custom-int" id="custom-int" />
+                            <Label htmlFor="custom-int" className="font-normal">Integer</Label>
+                        </div>
+                    </RadioGroup>
+                    {documentIdType === 'custom-string' && (
+                        <div className="mt-2">
+                            <Input id="customDocumentId" value={customDocumentId} onChange={e => setCustomDocumentId(e.target.value)} placeholder="Enter custom string ID" />
+                        </div>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {documentIdType === 'auto' && 'Firestore default 20-character string ID.'}
+                      {documentIdType === 'custom-string' && 'A user-defined string ID.'}
+                      {documentIdType === 'custom-int' && 'An integer ID (not recommended).'}
+                    </p>
                 </div>
             </CardContent>
         </Card>
