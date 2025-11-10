@@ -196,9 +196,19 @@ export default function FirestoreSizer() {
             <CardTitle>Repeated Fields</CardTitle>
              <div className="text-sm font-medium text-muted-foreground">{formatBytes(repeatedFieldsSize)}</div>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              Fields defined here will be placed inside an array of maps. Use the multiplier to simulate multiple entries. The array field is named `repeated_items`.
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="multiplier">Number of repeated entries</Label>
+              <Input
+                id="multiplier"
+                type="number"
+                min="0"
+                value={multiplier}
+                onChange={(e) => setMultiplier(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground !mt-2">
+              Fields defined below will be placed inside an array of maps. The array field is named `repeated_items`.
             </p>
             <FieldList
               allFields={fields}
@@ -210,24 +220,6 @@ export default function FirestoreSizer() {
       </div>
 
       <div className="lg:col-span-2 space-y-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Multiplier</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="multiplier">Number of repeated entries</Label>
-              <Input
-                id="multiplier"
-                type="number"
-                min="0"
-                value={multiplier}
-                onChange={(e) => setMultiplier(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              />
-            </div>
-          </CardContent>
-        </Card>
-        
         <div className="sticky top-8">
           <SizeVisualizer calculatedSize={totalSize} />
         </div>
