@@ -1,6 +1,6 @@
-export type FieldType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'map';
+export type FieldType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'map' | 'timestamp' | 'geopoint' | 'bytes' | 'reference';
 
-export type DocumentIdType = 'auto' | 'custom';
+export type DocumentIdType = 'auto' | 'custom-string' | 'custom-int';
 
 export interface Field {
   id: string;
@@ -8,7 +8,7 @@ export interface Field {
   name: string;
   type: FieldType;
   value: string | number | boolean | null;
-  size?: number; // For string size
+  size?: number; // For string, bytes, and reference path length
 }
 
 export interface FieldNode extends Omit<Field, 'parentId'> {

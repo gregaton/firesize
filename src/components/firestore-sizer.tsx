@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Field, FieldNode, FieldType, DocumentIdType } from "@/types";
-import { buildFieldTree, calculateDocumentSize } from "@/lib/firestore-size";
+import { buildFieldTree, calculateDocumentSize, formatBytes, getUtf8ByteLength } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ export default function FirestoreSizer() {
   const [collectionName, setCollectionName] = useState("my-collection");
   const [documentIdType, setDocumentIdType] = useState<DocumentIdType>("auto");
   const [documentId, setDocumentId] = useState("");
+  const [customIdLength, setCustomIdLength] = useState(20);
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -37,7 +38,7 @@ export default function FirestoreSizer() {
       name: parentType === "array" ? "" : `newField${fields.length}`,
       type: "string",
       value: "",
-      size: 0,
+      size: 10, // Default string size
     };
     setFields((prev) => [...prev, newField]);
   };
@@ -62,10 +63,13 @@ export default function FirestoreSizer() {
 
   const effectiveDocumentId = useMemo(() => {
     if (documentIdType === 'auto') {
-      return ' '.repeat(20); // Firestore auto-IDs are 20 characters
+      return '0'.repeat(20); // Firestore auto-IDs are 20 characters
+    }
+    if (documentIdType === 'custom-string') {
+      return '0'.repeat(customIdLength);
     }
     return documentId;
-  }, [documentIdType, documentId]);
+  }, [documentIdType, documentId, customIdLength]);
 
   const documentTree = useMemo(() => {
     const singleFieldsTree = buildFieldTree(fields, 'single');
@@ -97,7 +101,14 @@ export default function FirestoreSizer() {
 
   }, [fields, multiplier]);
 
-  const totalSize = useMemo(() => calculateDocumentSize(collectionName, effectiveDocumentId, documentTree), [collectionName, effectiveDocumentId, documentTree]);
+  const collectionNameSize = useMemo(() => getUtf8ByteLength(collectionName) + 1, [collectionName]);
+  const documentIdSize = useMemo(() => getUtf8ByteLength(effectiveDocumentId) + 1, [effectiveDocumentId]);
+
+  const totalSize = useMemo(() => {
+    const docSize = calculateDocumentSize(collectionName, effectiveDocumentId, documentTree);
+    return docSize;
+  }, [collectionName, effectiveDocumentId, documentTree]);
+
 
   const fieldHandlers = {
     onUpdate: handleUpdateField,
@@ -115,32 +126,54 @@ export default function FirestoreSizer() {
             <CardContent className="space-y-6">
                 <div>
                     <Label htmlFor="collectionName">Collection Name</Label>
-                    <Input id="collectionName" value={collectionName} onChange={e => setCollectionName(e.target.value)} />
-                    <p className="text-sm text-muted-foreground mt-1">The name of the collection.</p>
+                    <div className="flex items-center gap-2">
+                      <Input id="collectionName" value={collectionName} onChange={e => setCollectionName(e.target.value)} />
+                      <div className="h-9 flex items-center justify-end text-sm text-muted-foreground w-28 shrink-0 pr-2">
+                        {formatBytes(collectionNameSize)}
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">The name of the collection path.</p>
                 </div>
                  <div>
                     <Label>Document ID</Label>
-                    <RadioGroup value={documentIdType} onValueChange={(value: string) => setDocumentIdType(value as DocumentIdType)} className="mt-2 flex gap-4">
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="auto" id="auto" />
-                        <Label htmlFor="auto">Auto-generated ID (20 chars)</Label>
+                    <div className="flex items-center gap-2">
+                      <RadioGroup value={documentIdType} onValueChange={(value: string) => setDocumentIdType(value as DocumentIdType)} className="mt-2 flex gap-4 items-center h-9">
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="auto" id="auto" />
+                          <Label htmlFor="auto">Auto-generated (20 chars)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="custom-string" id="custom-string" />
+                          <Label htmlFor="custom-string">Custom String</Label>
+                        </div>
+                         <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="custom-int" id="custom-int" />
+                          <Label htmlFor="custom-int">Custom Integer</Label>
+                        </div>
+                      </RadioGroup>
+                      <div className="h-9 flex items-center justify-end text-sm text-muted-foreground w-28 shrink-0 pr-2">
+                        {formatBytes(documentIdSize)}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="custom" id="custom" />
-                        <Label htmlFor="custom">Custom ID</Label>
-                      </div>
-                    </RadioGroup>
-                    {documentIdType === 'custom' && (
+                    </div>
+                    {documentIdType === 'custom-string' && (
                        <div className="mt-2">
+                          <Label htmlFor="customIdLength" className="text-xs text-muted-foreground">ID Length</Label>
                           <Input 
-                            id="docId" 
-                            value={documentId} 
-                            onChange={e => setDocumentId(e.target.value)}
-                            placeholder="Enter custom document ID"
+                            id="customIdLength"
+                            type="number"
+                            min="1"
+                            value={customIdLength} 
+                            onChange={e => setCustomIdLength(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            placeholder="Enter custom ID length"
                           />
-                           <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
                        </div>
                     )}
+                    {documentIdType === 'custom-int' && (
+                       <div className="mt-2">
+                          <p className="text-sm text-muted-foreground">Integer IDs are stored as 8 bytes.</p>
+                       </div>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
                 </div>
             </CardContent>
         </Card>

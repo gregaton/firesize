@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { calculateFieldSize, formatBytes } from "@/lib/firestore-size";
 import { buildFieldTree } from "@/lib/firestore-size";
@@ -23,6 +22,10 @@ const DATA_TYPES: FieldType[] = [
   "null",
   "map",
   "array",
+  "timestamp",
+  "geopoint",
+  "bytes",
+  "reference",
 ];
 
 interface FieldEditorProps {
@@ -49,21 +52,52 @@ const FieldRow = ({
   
   const fieldSize = fieldNode ? calculateFieldSize(fieldNode, parentType === 'array') : 0;
 
+  const handleSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === '') {
+        onUpdate(field.id, { size: undefined });
+        return;
+    }
+    let numValue = parseInt(value, 10);
+    if (isNaN(numValue)) return;
+    numValue = Math.max(0, Math.min(numValue, 999999));
+    onUpdate(field.id, { size: numValue });
+  };
+  
   const renderValueInput = () => {
     switch (field.type) {
       case "string":
+      case "bytes":
         return (
           <Input
             type="number"
-            placeholder="String length"
+            required
+            min={0}
+            max={999999}
+            placeholder={field.type === 'string' ? "String length" : "Byte length"}
             value={field.size ?? ""}
-            onChange={(e) => onUpdate(field.id, { size: Number(e.target.value) || 0, value: "" })}
+            onChange={handleSizeChange}
+            className="h-9"
+          />
+        );
+      case "reference":
+         return (
+          <Input
+            type="number"
+            required
+            min={0}
+            max={999999}
+            placeholder="Path length"
+            value={field.size ?? ""}
+            onChange={handleSizeChange}
             className="h-9"
           />
         );
       case "number":
-        return <div className="h-9 w-full" />;
       case "boolean":
+      case "timestamp":
+      case "geopoint":
+      case "null":
          return <div className="h-9 w-full" />;
       default:
         return <div className="h-9 w-full" />;
@@ -85,7 +119,7 @@ const FieldRow = ({
         )}
         <Select
           value={field.type}
-          onValueChange={(type: FieldType) => onUpdate(field.id, { type, value: null })}
+          onValueChange={(type: FieldType) => onUpdate(field.id, { type, value: null, size: type === 'string' || type === 'bytes' || type === 'reference' ? 10 : undefined })}
         >
           <SelectTrigger className="w-48 h-9 shrink-0">
             <SelectValue placeholder="Type" />
