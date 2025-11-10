@@ -6,6 +6,7 @@ export interface Field {
   name: string;
   type: FieldType;
   value: string | number | boolean | null;
+  size?: number; // For string size
 }
 
 export interface FieldNode extends Omit<Field, 'parentId'> {

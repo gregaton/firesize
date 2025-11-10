@@ -10,15 +10,16 @@ import { Input } from "@/components/ui/input";
 import { FieldList } from "./field-editor";
 
 const INITIAL_FIELDS: Field[] = [
-  { id: 's1', parentId: 'single', name: 'author', type: 'string', value: 'Jane Doe' },
+  { id: 's1', parentId: 'single', name: 'author', type: 'string', value: 'Jane Doe', size: 8 },
   { id: 's2', parentId: 'single', name: 'views', type: 'number', value: 12345 },
-  { id: 'r1', parentId: 'repeated', name: 'comment', type: 'string', value: 'This is an example comment.' },
+  { id: 'r1', parentId: 'repeated', name: 'comment', type: 'string', value: 'This is an example comment.', size: 27 },
   { id: 'r2', parentId: 'repeated', name: 'likes', type: 'number', value: 10 },
 ];
 
 export default function FirestoreSizer() {
   const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
   const [multiplier, setMultiplier] = useState(1);
+  const [documentId, setDocumentId] = useState("my-awesome-document-id");
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -33,6 +34,7 @@ export default function FirestoreSizer() {
       name: parentType === "array" ? "" : `newField${fields.length}`,
       type: "string",
       value: "",
+      size: 0,
     };
     setFields((prev) => [...prev, newField]);
   };
@@ -76,6 +78,7 @@ export default function FirestoreSizer() {
             id: `${f.id}-${i}`
           })),
         })),
+        size: 0
       };
       return [...singleFieldsTree, repeatedItemsArray];
     }
@@ -84,7 +87,7 @@ export default function FirestoreSizer() {
 
   }, [fields, multiplier]);
 
-  const totalSize = useMemo(() => calculateDocumentSize(documentTree), [documentTree]);
+  const totalSize = useMemo(() => calculateDocumentSize(documentTree, documentId), [documentTree, documentId]);
 
   const fieldHandlers = {
     onUpdate: handleUpdateField,
@@ -95,6 +98,18 @@ export default function FirestoreSizer() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
       <div className="lg:col-span-3 space-y-8">
+        <Card>
+            <CardHeader>
+                <CardTitle>Document Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                    <Label htmlFor="docId">Document ID</Label>
+                    <Input id="docId" value={documentId} onChange={e => setDocumentId(e.target.value)} />
+                    <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
+                </div>
+            </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Fields</CardTitle>

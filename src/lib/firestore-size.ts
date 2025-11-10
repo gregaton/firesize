@@ -21,7 +21,10 @@ function getUtf8ByteLength(str: string): number {
 function calculateValueSize(field: FieldNode): number {
   switch (field.type) {
     case "string":
-      return getUtf8ByteLength(String(field.value ?? "")) + 1;
+      // If size is provided, use it for length, otherwise calculate from value
+      const stringLength = field.size ?? String(field.value ?? "").length;
+      const fakeString = " ".repeat(stringLength);
+      return getUtf8ByteLength(fakeString) + 1;
     case "number":
       return 8;
     case "boolean":
@@ -61,8 +64,14 @@ export function buildFieldTree(
     }));
 }
 
-export function calculateDocumentSize(doc: FieldNode[]): number {
-  return doc.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+export function calculateDocumentSize(doc: FieldNode[], docId: string = ''): number {
+  const documentNameSize = getUtf8ByteLength(docId) + 1;
+  const collectionIdOverhead = 1; // Assuming a collection name, even empty, takes some overhead
+  const pathSize = collectionIdOverhead + documentNameSize;
+
+  const fieldsSize = doc.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+  
+  return pathSize + fieldsSize + 32; // Document overhead of 32 bytes
 }
 
 export function formatBytes(bytes: number, decimals = 2) {

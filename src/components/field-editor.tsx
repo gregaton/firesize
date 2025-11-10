@@ -44,9 +44,10 @@ const FieldRow = ({
       case "string":
         return (
           <Input
-            placeholder="String value"
-            value={String(field.value ?? "")}
-            onChange={(e) => onUpdate(field.id, { value: e.target.value })}
+            type="number"
+            placeholder="String length"
+            value={field.size ?? String(field.value ?? "").length}
+            onChange={(e) => onUpdate(field.id, { size: Number(e.target.value), value: "" })}
             className="h-9"
           />
         );
