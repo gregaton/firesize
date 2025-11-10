@@ -34,17 +34,17 @@ export function calculateValueSize(field: FieldNode): number {
     case "geopoint":
         return 16;
     case "bytes":
-        return (field.size ?? 0) + 1;
+        return (field.size ?? 0); // No +1 for bytes, it's just the length
     case "reference":
         // This is a rough estimation. It depends on the project ID, database ID, and the path itself.
-        // We'll estimate based on path length. A full reference path looks like:
-        // /projects/{projectId}/databases/{databaseId}/documents/{collectionId}/{documentId}
-        // For simplicity, we just calculate the size of the provided path string.
+        // A full reference path looks like: /projects/{projectId}/databases/{databaseId}/documents/{collectionId}/{documentId}
         const path = " ".repeat(field.size ?? 0);
-        return getUtf8ByteLength(path) + 16; // Add 16 bytes overhead for reference type
+        const pathSegments = path.split('/').filter(p => p.length > 0);
+        const pathSize = pathSegments.reduce((sum, segment) => sum + getUtf8ByteLength(segment) + 1, 0);
+        return pathSize + 16;
     case "map":
       return field.children.reduce(
-        (sum, child) => sum + calculateFieldSize(child),
+        (sum, child) => sum + calculateFieldSize(child, false),
         0
       );
     case "array":
@@ -58,10 +58,16 @@ export function calculateValueSize(field: FieldNode): number {
 }
 
 export function calculateFieldSize(field: FieldNode, isArrayElement = false): number {
+  // Field name size is only added for map fields, not for array elements
   const nameSize = !isArrayElement && field.name ? getUtf8ByteLength(field.name) + 1 : 0;
   const valueSize = calculateValueSize(field);
   return nameSize + valueSize;
 }
+
+export function calculateFieldsSize(fields: FieldNode[]): number {
+  return fields.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+}
+
 
 export function buildFieldTree(
   allFields: Field[],
@@ -75,14 +81,22 @@ export function buildFieldTree(
     }));
 }
 
-export function calculateDocumentSize(collectionName: string, docId: string, doc: FieldNode[]): number {
-  // Document Name: projects/{projectId}/databases/(default)/documents/{collectionId}/{documentId}
-  // This is a simplified calculation. The actual project ID and database ID are not available here.
-  // We estimate based on the collection name and document ID.
-  const pathSize = getUtf8ByteLength(collectionName) + 1 + getUtf8ByteLength(docId) + 1;
-  const fieldsSize = doc.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+
+export function calculateDocumentPathSize(fullPath: string): number {
+    if (!fullPath) return 16;
+    const segments = fullPath.split('/').filter(p => p.length > 0);
+    // Each segment in the path costs its UTF-8 size + 1 byte
+    const segmentsSize = segments.reduce((sum, segment) => sum + getUtf8ByteLength(segment) + 1, 0);
+    // The document name has an additional 16 bytes of overhead
+    return segmentsSize + 16;
+}
+
+
+export function calculateDocumentSize(documentPath: string, fields: FieldNode[]): number {
+  const pathSize = calculateDocumentPathSize(documentPath);
+  const fieldsSize = calculateFieldsSize(fields);
   
-  // Document overhead is 32 bytes
+  // Total size is document name size + fields size + 32 bytes document overhead
   return pathSize + fieldsSize + 32; 
 }
 

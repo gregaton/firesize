@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Field, FieldNode, FieldType, DocumentIdType } from "@/types";
-import { buildFieldTree, calculateDocumentSize, formatBytes, getUtf8ByteLength } from "@/lib/firestore-size";
+import { buildFieldTree, calculateDocumentSize, formatBytes, calculateDocumentPathSize, calculateFieldsSize } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -20,10 +20,7 @@ const INITIAL_FIELDS: Field[] = [
 export default function FirestoreSizer() {
   const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
   const [multiplier, setMultiplier] = useState(1);
-  const [collectionName, setCollectionName] = useState("my-collection");
-  const [documentIdType, setDocumentIdType] = useState<DocumentIdType>("auto");
-  const [documentId, setDocumentId] = useState("");
-  const [customIdLength, setCustomIdLength] = useState(20);
+  const [documentPath, setDocumentPath] = useState("users/some_user_id/posts/my_post_id");
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -61,20 +58,11 @@ export default function FirestoreSizer() {
     setFields((prev) => prev.filter((f) => !idsToDelete.has(f.id)));
   };
 
-  const effectiveDocumentId = useMemo(() => {
-    if (documentIdType === 'auto') {
-      return '0'.repeat(20); // Firestore auto-IDs are 20 characters
-    }
-    if (documentIdType === 'custom-string') {
-      return '0'.repeat(customIdLength);
-    }
-    return documentId;
-  }, [documentIdType, documentId, customIdLength]);
+
+  const singleFieldsTree = useMemo(() => buildFieldTree(fields, 'single'), [fields]);
+  const repeatedFieldsTree = useMemo(() => buildFieldTree(fields, 'repeated'), [fields]);
 
   const documentTree = useMemo(() => {
-    const singleFieldsTree = buildFieldTree(fields, 'single');
-    const repeatedFieldsTree = buildFieldTree(fields, 'repeated');
-    
     if (multiplier > 0 && repeatedFieldsTree.length > 0) {
       const repeatedItemsArray: FieldNode = {
         id: 'repeated-items-array',
@@ -99,15 +87,24 @@ export default function FirestoreSizer() {
     
     return singleFieldsTree;
 
-  }, [fields, multiplier]);
+  }, [singleFieldsTree, repeatedFieldsTree, multiplier]);
 
-  const collectionNameSize = useMemo(() => getUtf8ByteLength(collectionName) + 1, [collectionName]);
-  const documentIdSize = useMemo(() => getUtf8ByteLength(effectiveDocumentId) + 1, [effectiveDocumentId]);
+  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(documentPath) + 32, [documentPath]);
+  const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
+  const repeatedFieldsSize = useMemo(() => {
+     if (multiplier > 0 && repeatedFieldsTree.length > 0) {
+       // Size of the wrapper array field name
+       const arrayNameSize = "repeated_items".length + 1;
+       // Size of each map inside the array
+       const singleMapSize = calculateFieldsSize(repeatedFieldsTree);
+       return arrayNameSize + (singleMapSize * multiplier);
+     }
+     return 0;
+  }, [repeatedFieldsTree, multiplier]);
 
   const totalSize = useMemo(() => {
-    const docSize = calculateDocumentSize(collectionName, effectiveDocumentId, documentTree);
-    return docSize;
-  }, [collectionName, effectiveDocumentId, documentTree]);
+    return calculateDocumentSize(documentPath, documentTree);
+  }, [documentPath, documentTree]);
 
 
   const fieldHandlers = {
@@ -120,66 +117,24 @@ export default function FirestoreSizer() {
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
       <div className="lg:col-span-3 space-y-8">
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Document Details</CardTitle>
+                <div className="text-sm font-medium text-muted-foreground">{formatBytes(documentDetailsSize)}</div>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div>
-                    <Label htmlFor="collectionName">Collection Name</Label>
+                    <Label htmlFor="documentPath">Document Path</Label>
                     <div className="flex items-center gap-2">
-                      <Input id="collectionName" value={collectionName} onChange={e => setCollectionName(e.target.value)} />
-                      <div className="h-9 flex items-center justify-end text-sm text-muted-foreground w-28 shrink-0 pr-2">
-                        {formatBytes(collectionNameSize)}
-                      </div>
+                      <Input id="documentPath" value={documentPath} onChange={e => setDocumentPath(e.target.value)} placeholder="e.g., users/user_id/posts/post_id" />
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">The name of the collection path.</p>
-                </div>
-                 <div>
-                    <Label>Document ID</Label>
-                    <div className="flex items-center gap-2">
-                      <RadioGroup value={documentIdType} onValueChange={(value: string) => setDocumentIdType(value as DocumentIdType)} className="mt-2 flex gap-4 items-center h-9">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="auto" id="auto" />
-                          <Label htmlFor="auto">Auto-generated (20 chars)</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="custom-string" id="custom-string" />
-                          <Label htmlFor="custom-string">Custom String</Label>
-                        </div>
-                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="custom-int" id="custom-int" />
-                          <Label htmlFor="custom-int">Custom Integer</Label>
-                        </div>
-                      </RadioGroup>
-                      <div className="h-9 flex items-center justify-end text-sm text-muted-foreground w-28 shrink-0 pr-2">
-                        {formatBytes(documentIdSize)}
-                      </div>
-                    </div>
-                    {documentIdType === 'custom-string' && (
-                       <div className="mt-2">
-                          <Label htmlFor="customIdLength" className="text-xs text-muted-foreground">ID Length</Label>
-                          <Input 
-                            id="customIdLength"
-                            type="number"
-                            min="1"
-                            value={customIdLength} 
-                            onChange={e => setCustomIdLength(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            placeholder="Enter custom ID length"
-                          />
-                       </div>
-                    )}
-                    {documentIdType === 'custom-int' && (
-                       <div className="mt-2">
-                          <p className="text-sm text-muted-foreground">Integer IDs are stored as 8 bytes.</p>
-                       </div>
-                    )}
-                    <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
+                    <p className="text-sm text-muted-foreground mt-1">The full path to the document, including collection and document IDs.</p>
                 </div>
             </CardContent>
         </Card>
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Fields</CardTitle>
+            <div className="text-sm font-medium text-muted-foreground">{formatBytes(singleFieldsSize)}</div>
           </CardHeader>
           <CardContent>
             <FieldList
@@ -190,12 +145,13 @@ export default function FirestoreSizer() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Repeated Fields</CardTitle>
+             <div className="text-sm font-medium text-muted-foreground">{formatBytes(repeatedFieldsSize)}</div>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              Fields defined here will be placed inside an array of maps. Use the multiplier to simulate multiple entries.
+              Fields defined here will be placed inside an array of maps. Use the multiplier to simulate multiple entries. The array field is named `repeated_items`.
             </p>
             <FieldList
               allFields={fields}
