@@ -1,5 +1,5 @@
-# Firebase Studio
+# Firesize
 
-This is a NextJS starter in Firebase Studio.
+Calculate the size of a Firestore document.
 
-To get started, take a look at src/app/page.tsx.
+Calculation based on https://firebase.google.com/docs/firestore/storage-size
