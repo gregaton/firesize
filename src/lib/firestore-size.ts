@@ -18,13 +18,11 @@ function getUtf8ByteLength(str: string): number {
   }
 }
 
-function calculateValueSize(field: FieldNode): number {
+export function calculateValueSize(field: FieldNode): number {
   switch (field.type) {
     case "string":
-      // If size is provided, use it for length, otherwise calculate from value
-      const stringLength = field.size ?? String(field.value ?? "").length;
-      const fakeString = " ".repeat(stringLength);
-      return getUtf8ByteLength(fakeString) + 1;
+      const stringValue = " ".repeat(field.size ?? 0);
+      return getUtf8ByteLength(stringValue) + 1;
     case "number":
       return 8;
     case "boolean":
@@ -46,8 +44,8 @@ function calculateValueSize(field: FieldNode): number {
   }
 }
 
-function calculateFieldSize(field: FieldNode): number {
-  const nameSize = field.name ? getUtf8ByteLength(field.name) + 1 : 0;
+export function calculateFieldSize(field: FieldNode, isArrayElement = false): number {
+  const nameSize = !isArrayElement && field.name ? getUtf8ByteLength(field.name) + 1 : 0;
   const valueSize = calculateValueSize(field);
   return nameSize + valueSize;
 }
@@ -64,14 +62,12 @@ export function buildFieldTree(
     }));
 }
 
-export function calculateDocumentSize(doc: FieldNode[], docId: string = ''): number {
-  const documentNameSize = getUtf8ByteLength(docId) + 1;
-  const collectionIdOverhead = 1; // Assuming a collection name, even empty, takes some overhead
-  const pathSize = collectionIdOverhead + documentNameSize;
-
+export function calculateDocumentSize(collectionName: string, docId: string, doc: FieldNode[]): number {
+  const pathSize = getUtf8ByteLength(collectionName) + 1 + getUtf8ByteLength(docId) + 1;
   const fieldsSize = doc.reduce((sum, field) => sum + calculateFieldSize(field), 0);
   
-  return pathSize + fieldsSize + 32; // Document overhead of 32 bytes
+  // Document overhead is 32 bytes
+  return pathSize + fieldsSize + 32; 
 }
 
 export function formatBytes(bytes: number, decimals = 2) {
@@ -79,6 +75,7 @@ export function formatBytes(bytes: number, decimals = 2) {
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  // Use base 0 for bytes to avoid showing "NaN" for 0 bytes
+  const i = bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Field, FieldNode, FieldType } from "@/types";
+import type { Field, FieldNode, FieldType, DocumentIdType } from "@/types";
 import { buildFieldTree, calculateDocumentSize } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { FieldList } from "./field-editor";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const INITIAL_FIELDS: Field[] = [
   { id: 's1', parentId: 'single', name: 'author', type: 'string', value: 'Jane Doe', size: 8 },
@@ -19,7 +20,9 @@ const INITIAL_FIELDS: Field[] = [
 export default function FirestoreSizer() {
   const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
   const [multiplier, setMultiplier] = useState(1);
-  const [documentId, setDocumentId] = useState("my-awesome-document-id");
+  const [collectionName, setCollectionName] = useState("my-collection");
+  const [documentIdType, setDocumentIdType] = useState<DocumentIdType>("auto");
+  const [documentId, setDocumentId] = useState("");
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -57,6 +60,13 @@ export default function FirestoreSizer() {
     setFields((prev) => prev.filter((f) => !idsToDelete.has(f.id)));
   };
 
+  const effectiveDocumentId = useMemo(() => {
+    if (documentIdType === 'auto') {
+      return ' '.repeat(20); // Firestore auto-IDs are 20 characters
+    }
+    return documentId;
+  }, [documentIdType, documentId]);
+
   const documentTree = useMemo(() => {
     const singleFieldsTree = buildFieldTree(fields, 'single');
     const repeatedFieldsTree = buildFieldTree(fields, 'repeated');
@@ -87,7 +97,7 @@ export default function FirestoreSizer() {
 
   }, [fields, multiplier]);
 
-  const totalSize = useMemo(() => calculateDocumentSize(documentTree, documentId), [documentTree, documentId]);
+  const totalSize = useMemo(() => calculateDocumentSize(collectionName, effectiveDocumentId, documentTree), [collectionName, effectiveDocumentId, documentTree]);
 
   const fieldHandlers = {
     onUpdate: handleUpdateField,
@@ -102,11 +112,35 @@ export default function FirestoreSizer() {
             <CardHeader>
                 <CardTitle>Document Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                 <div>
-                    <Label htmlFor="docId">Document ID</Label>
-                    <Input id="docId" value={documentId} onChange={e => setDocumentId(e.target.value)} />
-                    <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
+                    <Label htmlFor="collectionName">Collection Name</Label>
+                    <Input id="collectionName" value={collectionName} onChange={e => setCollectionName(e.target.value)} />
+                    <p className="text-sm text-muted-foreground mt-1">The name of the collection.</p>
+                </div>
+                 <div>
+                    <Label>Document ID</Label>
+                    <RadioGroup value={documentIdType} onValueChange={(value: string) => setDocumentIdType(value as DocumentIdType)} className="mt-2 flex gap-4">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="auto" id="auto" />
+                        <Label htmlFor="auto">Auto-generated ID (20 chars)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="custom" id="custom" />
+                        <Label htmlFor="custom">Custom ID</Label>
+                      </div>
+                    </RadioGroup>
+                    {documentIdType === 'custom' && (
+                       <div className="mt-2">
+                          <Input 
+                            id="docId" 
+                            value={documentId} 
+                            onChange={e => setDocumentId(e.target.value)}
+                            placeholder="Enter custom document ID"
+                          />
+                           <p className="text-sm text-muted-foreground mt-1">The ID of the document itself is part of its size.</p>
+                       </div>
+                    )}
                 </div>
             </CardContent>
         </Card>

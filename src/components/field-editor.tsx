@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PlusCircle, Trash2 } from "lucide-react";
+import { calculateFieldSize, formatBytes } from "@/lib/firestore-size";
+import { buildFieldTree } from "@/lib/firestore-size";
 
 const DATA_TYPES: FieldType[] = [
   "string",
@@ -39,6 +41,14 @@ const FieldRow = ({
   const { allFields, parentType, onUpdate, onAdd, onDelete } = props;
   const isNameEditable = parentType !== "array";
 
+  const fieldNode = React.useMemo(() => {
+    // We need to build a partial tree for this field to calculate its size
+    const tree = buildFieldTree(allFields, field.parentId);
+    return tree.find(f => f.id === field.id);
+  }, [allFields, field.id, field.parentId]);
+  
+  const fieldSize = fieldNode ? calculateFieldSize(fieldNode, parentType === 'array') : 0;
+
   const renderValueInput = () => {
     switch (field.type) {
       case "string":
@@ -46,32 +56,17 @@ const FieldRow = ({
           <Input
             type="number"
             placeholder="String length"
-            value={field.size ?? String(field.value ?? "").length}
-            onChange={(e) => onUpdate(field.id, { size: Number(e.target.value), value: "" })}
+            value={field.size ?? ""}
+            onChange={(e) => onUpdate(field.id, { size: Number(e.target.value) || 0, value: "" })}
             className="h-9"
           />
         );
       case "number":
-        return (
-          <Input
-            type="number"
-            placeholder="Number value"
-            value={String(field.value ?? 0)}
-            onChange={(e) => onUpdate(field.id, { value: Number(e.target.value) })}
-            className="h-9"
-          />
-        );
+        return <div className="h-9 w-full" />;
       case "boolean":
-        return (
-          <div className="flex items-center h-9">
-            <Switch
-              checked={!!field.value}
-              onCheckedChange={(checked) => onUpdate(field.id, { value: checked })}
-            />
-          </div>
-        );
+         return <div className="h-9 w-full" />;
       default:
-        return <div className="h-9" />;
+        return <div className="h-9 w-full" />;
     }
   };
 
@@ -92,7 +87,7 @@ const FieldRow = ({
           value={field.type}
           onValueChange={(type: FieldType) => onUpdate(field.id, { type, value: null })}
         >
-          <SelectTrigger className="w-48 h-9">
+          <SelectTrigger className="w-48 h-9 shrink-0">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -104,6 +99,9 @@ const FieldRow = ({
           </SelectContent>
         </Select>
         <div className="w-full">{renderValueInput()}</div>
+        <div className="h-9 flex items-center justify-end text-sm text-muted-foreground w-28 shrink-0 pr-2">
+          {formatBytes(fieldSize)}
+        </div>
         <Button
           variant="ghost"
           size="icon"

@@ -1,5 +1,7 @@
 export type FieldType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'map';
 
+export type DocumentIdType = 'auto' | 'custom';
+
 export interface Field {
   id: string;
   parentId: string; // 'single' for single fields, 'repeated' for repeated fields, or another field's id
