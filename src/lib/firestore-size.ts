@@ -3,6 +3,7 @@ import type { Field, FieldNode, FieldType } from "@/types";
 export const MAX_DOC_SIZE = 1 * 1024 * 1024; // 1 MiB
 
 export function getUtf8ByteLength(str: string): number {
+  if (!str) return 0;
   try {
     return new TextEncoder().encode(str).length;
   } catch (e) {
@@ -48,11 +49,14 @@ export function calculateValueSize(field: FieldNode): number {
       );
     case "array":
       const arraySize = field.size ?? 0;
-      if (arraySize === 0) return 0;
+      if (arraySize === 0 || field.children.length === 0) return 0;
+
+      // For arrays of maps/primitives, calculate the size of one representative element
       const elementSize = field.children.reduce(
-        (sum, child) => sum + calculateValueSize(child),
+        (sum, child) => sum + calculateFieldSize(child, true), // Treat as an array element
         0
       );
+      
       return elementSize * arraySize;
     default:
       return 0;
@@ -86,12 +90,16 @@ export function buildFieldTree(
 
 export function calculateDocumentPathSize(fullPath: string): number {
     if (!fullPath) return 0;
+    // Split by / but ignore empty strings from leading/trailing/multiple slashes
     const segments = fullPath.split('/').filter(p => p.length > 0);
-    // The path stored in the document name does not include the final document ID segment.
-    const pathWithoutDocId = segments.slice(0, -1).join('/');
-    // Each segment in the path costs its UTF-8 size + 1 byte.
-    // Plus 16 bytes for the full path
-    return getUtf8ByteLength(pathWithoutDocId) + segments.length -1 + 16;
+    // The path stored *in the document name* does not include the final document ID segment
+    const pathSegments = segments.slice(0, -1);
+    
+    // Size is sum of segment lengths + 1 byte per segment
+    const pathBytes = pathSegments.reduce((sum, segment) => sum + getUtf8ByteLength(segment) + 1, 0);
+
+    // Plus 16 bytes overhead for the path
+    return pathBytes + 16;
 }
 
 
@@ -100,12 +108,15 @@ export function calculateDocumentSize(documentPath: string, fields: FieldNode[])
   const collectionPath = segments.slice(0, -1).join('/');
   const documentId = segments.slice(-1)[0] || '';
 
-  const pathSize = calculateDocumentPathSize(collectionPath);
-  const docIdSize = getUtf8ByteLength(documentId) + 1;
+  // The size of the document name is the full path + doc id + null terminator
+  const documentNameSize = getUtf8ByteLength(collectionPath) 
+      + (collectionPath ? 1 : 0) // Separator if collection path exists
+      + getUtf8ByteLength(documentId) + 1;
+
   const fieldsSize = calculateFieldsSize(fields);
   
   // Total size is document name size + fields size + 32 bytes document overhead
-  return pathSize + docIdSize + fieldsSize + 32; 
+  return documentNameSize + fieldsSize + 32; 
 }
 
 export function formatBytes(bytes: number, decimals = 2) {

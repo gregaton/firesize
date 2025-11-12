@@ -38,6 +38,7 @@ export default function FirestoreSizer() {
   const [customDocumentId, setCustomDocumentId] = useState(INITIAL_STATE.customDocumentId);
   const [isMounted, setIsMounted] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<SavedConfiguration | null>(null);
 
   const [savedConfigs, setSavedConfigs] = useLocalStorage<SavedConfiguration[]>('firestore-sizer-configs', []);
 
@@ -119,7 +120,7 @@ export default function FirestoreSizer() {
   const singleFieldsTree = useMemo(() => buildFieldTree(fields, 'single'), [fields]);
   const repeatedFieldsTree = useMemo(() => buildFieldTree(fields, 'repeated'), [fields]);
 
-  const documentTree = useMemo(() => {
+  const documentTree: FieldNode[] = useMemo(() => {
     if (multiplier > 0 && repeatedFieldsTree.length > 0) {
       const repeatedItemsArray: FieldNode = {
         id: 'repeated-items-array',
@@ -163,7 +164,7 @@ export default function FirestoreSizer() {
   const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
   const repeatedFieldsSize = useMemo(() => {
      if (multiplier > 0 && repeatedFieldsTree.length > 0) {
-       const arrayNameSize = "repeated_items".length + 1;
+       const arrayNameSize = getUtf8ByteLength("repeated_items") + 1;
        const singleMapSize = calculateFieldsSize(repeatedFieldsTree);
        return arrayNameSize + (singleMapSize * multiplier);
      }
@@ -181,22 +182,34 @@ export default function FirestoreSizer() {
     onDelete: handleDeleteField,
   };
   
-  const handleSaveConfiguration = (name: string) => {
-    const newConfig: SavedConfiguration = {
-      id: crypto.randomUUID(),
-      name,
-      timestamp: new Date().toISOString(),
-      config: {
-        fields,
-        multiplier,
-        collectionPath,
-        documentIdType,
-        customDocumentId,
-      },
-      totalSize,
-      fullDocumentPath,
+  const handleSaveConfiguration = (name: string, id?: string) => {
+    const configToSave = {
+      fields,
+      multiplier,
+      collectionPath,
+      documentIdType,
+      customDocumentId,
     };
-    setSavedConfigs([newConfig, ...savedConfigs]);
+  
+    if (id) {
+      // Overwrite existing config
+      setSavedConfigs(savedConfigs.map(c => 
+        c.id === id 
+        ? { ...c, name, config: configToSave, totalSize, fullDocumentPath, timestamp: new Date().toISOString() } 
+        : c
+      ));
+    } else {
+      // Add new config
+      const newConfig: SavedConfiguration = {
+        id: crypto.randomUUID(),
+        name,
+        timestamp: new Date().toISOString(),
+        config: configToSave,
+        totalSize,
+        fullDocumentPath,
+      };
+      setSavedConfigs([newConfig, ...savedConfigs]);
+    }
   };
 
   const handleLoadConfiguration = (configToLoad: SavedConfiguration) => {
@@ -212,6 +225,11 @@ export default function FirestoreSizer() {
     setSavedConfigs(savedConfigs.filter(c => c.id !== id));
   }
 
+  const openSaveDialog = (config: SavedConfiguration | null = null) => {
+    setEditingConfig(config);
+    setIsSaveDialogOpen(true);
+  };
+
   if (!isMounted) {
     return null; // or a loading spinner
   }
@@ -222,6 +240,8 @@ export default function FirestoreSizer() {
         isOpen={isSaveDialogOpen}
         onClose={() => setIsSaveDialogOpen(false)}
         onSave={handleSaveConfiguration}
+        existingNames={savedConfigs.map(c => c.name)}
+        editingConfig={editingConfig}
       />
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
       <div className="lg:col-span-3 space-y-8">
@@ -320,7 +340,7 @@ export default function FirestoreSizer() {
                   <CardTitle>Manage Configurations</CardTitle>
               </CardHeader>
               <CardContent>
-                  <Button onClick={() => setIsSaveDialogOpen(true)} className="w-full">
+                  <Button onClick={() => openSaveDialog()} className="w-full">
                       <Save className="mr-2 h-4 w-4" />
                       Save Current Configuration
                   </Button>
@@ -328,6 +348,7 @@ export default function FirestoreSizer() {
                     configs={savedConfigs}
                     onLoad={handleLoadConfiguration}
                     onDelete={handleDeleteConfiguration}
+                    onEdit={openSaveDialog}
                   />
               </CardContent>
            </Card>

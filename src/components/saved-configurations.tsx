@@ -3,7 +3,7 @@
 import type { SavedConfiguration } from "@/types";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/firestore-size";
-import { Trash2, Upload } from "lucide-react";
+import { Pencil, Trash2, Upload } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,12 +21,14 @@ interface SavedConfigurationsListProps {
   configs: SavedConfiguration[];
   onLoad: (config: SavedConfiguration) => void;
   onDelete: (id: string) => void;
+  onEdit: (config: SavedConfiguration) => void;
 }
 
 export function SavedConfigurationsList({
   configs,
   onLoad,
   onDelete,
+  onEdit,
 }: SavedConfigurationsListProps) {
   if (configs.length === 0) {
     return (
@@ -56,6 +58,9 @@ export function SavedConfigurationsList({
           <div className="flex items-center shrink-0 ml-2">
             <Button variant="ghost" size="icon" onClick={() => onLoad(config)} title="Load">
               <Upload className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onEdit(config)} title="Edit">
+              <Pencil className="h-4 w-4" />
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
