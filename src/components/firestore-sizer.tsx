@@ -47,7 +47,41 @@ export default function FirestoreSizer() {
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
+      prev.map((f) => {
+        if (f.id === id) {
+          const newField = { ...f, ...updates };
+          if (updates.type === 'array' && !fields.some(child => child.parentId === id)) {
+            // Add a default child when type is changed to array
+             const newChild: Field = {
+                id: crypto.randomUUID(),
+                parentId: id,
+                name: '',
+                type: 'string',
+                value: '',
+                size: 10
+             };
+             // Use a timeout to avoid updating state while rendering
+             setTimeout(() => setFields(currentFields => [...currentFields, newChild]), 0);
+          } else if (updates.type && f.type === 'array' && updates.type !== 'array') {
+              // If type is changed from array, remove children
+              const idsToDelete = new Set<string>();
+              const queue = [id];
+              while(queue.length > 0) {
+                  const parentId = queue.shift()!;
+                  const children = fields.filter(field => field.parentId === parentId);
+                  children.forEach(child => {
+                      idsToDelete.add(child.id);
+                      if (child.type === 'map' || child.type === 'array') {
+                          queue.push(child.id);
+                      }
+                  })
+              }
+              setTimeout(() => setFields(currentFields => currentFields.filter(field => !idsToDelete.has(field.id))), 0);
+          }
+          return newField;
+        }
+        return f;
+      })
     );
   };
 
@@ -102,7 +136,7 @@ export default function FirestoreSizer() {
             id: `${f.id}-${i}`
           })),
         })),
-        size: 0
+        size: multiplier
       };
       return [...singleFieldsTree, repeatedItemsArray];
     }
@@ -124,7 +158,8 @@ export default function FirestoreSizer() {
 
   const fullDocumentPath = useMemo(() => `${collectionPath}/${documentId}`, [collectionPath, documentId]);
 
-  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(collectionPath) + documentIdSize + 32, [collectionPath, documentIdSize]);
+  const pathSize = useMemo(() => calculateDocumentPathSize(collectionPath), [collectionPath]);
+  const documentDetailsSize = useMemo(() => pathSize + documentIdSize + 32, [pathSize, documentIdSize]);
   const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
   const repeatedFieldsSize = useMemo(() => {
      if (multiplier > 0 && repeatedFieldsTree.length > 0) {
@@ -199,7 +234,7 @@ export default function FirestoreSizer() {
                 <div>
                   <div className="flex justify-between items-center">
                     <Label htmlFor="collectionPath">Document Path</Label>
-                    <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateDocumentPathSize(collectionPath))}</div>
+                    <div className="text-sm font-medium text-muted-foreground">{formatBytes(pathSize)}</div>
                   </div>
                   <Input id="collectionPath" value={collectionPath} onChange={e => setCollectionPath(e.target.value)} placeholder="e.g., users/user_id" />
                   <p className="text-sm text-muted-foreground mt-1">The collection path leading to the document, e.g., `users/user_id/posts`.</p>

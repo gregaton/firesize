@@ -47,10 +47,13 @@ export function calculateValueSize(field: FieldNode): number {
         0
       );
     case "array":
-      return field.children.reduce(
+      const arraySize = field.size ?? 0;
+      if (arraySize === 0) return 0;
+      const elementSize = field.children.reduce(
         (sum, child) => sum + calculateValueSize(child),
         0
       );
+      return elementSize * arraySize;
     default:
       return 0;
   }
@@ -84,10 +87,11 @@ export function buildFieldTree(
 export function calculateDocumentPathSize(fullPath: string): number {
     if (!fullPath) return 0;
     const segments = fullPath.split('/').filter(p => p.length > 0);
-    // Each segment in the path costs its UTF-8 size + 1 byte.
     // The path stored in the document name does not include the final document ID segment.
     const pathWithoutDocId = segments.slice(0, -1).join('/');
-    return getUtf8ByteLength(pathWithoutDocId);
+    // Each segment in the path costs its UTF-8 size + 1 byte.
+    // Plus 16 bytes for the full path
+    return getUtf8ByteLength(pathWithoutDocId) + segments.length -1 + 16;
 }
 
 
@@ -96,12 +100,12 @@ export function calculateDocumentSize(documentPath: string, fields: FieldNode[])
   const collectionPath = segments.slice(0, -1).join('/');
   const documentId = segments.slice(-1)[0] || '';
 
-  const pathSize = getUtf8ByteLength(collectionPath);
+  const pathSize = calculateDocumentPathSize(collectionPath);
   const docIdSize = getUtf8ByteLength(documentId) + 1;
   const fieldsSize = calculateFieldsSize(fields);
   
   // Total size is document name size + fields size + 32 bytes document overhead
-  return pathSize + docIdSize + 16 + fieldsSize + 32; 
+  return pathSize + docIdSize + fieldsSize + 32; 
 }
 
 export function formatBytes(bytes: number, decimals = 2) {

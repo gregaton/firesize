@@ -104,6 +104,19 @@ const FieldRow = ({
             className="h-9"
           />
         );
+      case "array":
+        return (
+          <Input
+            type="number"
+            required
+            min={0}
+            max={999999}
+            placeholder="Number of elements"
+            value={field.size ?? ""}
+            onChange={handleSizeChange}
+            className="h-9"
+          />
+        );
       case "number":
       case "boolean":
       case "timestamp":
@@ -130,7 +143,7 @@ const FieldRow = ({
         )}
         <Select
           value={field.type}
-          onValueChange={(type: FieldType) => onUpdate(field.id, { type, value: null, size: type === 'string' || type === 'bytes' || type === 'reference' ? 10 : undefined })}
+          onValueChange={(type: FieldType) => onUpdate(field.id, { type, value: null, size: type === 'string' || type === 'bytes' || type === 'reference' || type === 'array' ? 1 : undefined })}
         >
           <SelectTrigger className="w-48 h-9 shrink-0">
             <SelectValue placeholder="Type" />
