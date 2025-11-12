@@ -14,3 +14,20 @@ export interface Field {
 export interface FieldNode extends Omit<Field, 'parentId'> {
   children: FieldNode[];
 }
+
+export type Configuration = {
+  fields: Field[];
+  multiplier: number;
+  collectionPath: string;
+  documentIdType: DocumentIdType;
+  customDocumentId: string;
+};
+
+export interface SavedConfiguration {
+  id: string;
+  name: string;
+  timestamp: string;
+  config: Configuration;
+  totalSize: number;
+  fullDocumentPath: string;
+}

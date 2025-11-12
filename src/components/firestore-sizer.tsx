@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Field, FieldNode, FieldType, DocumentIdType } from "@/types";
+import { useMemo, useState, useEffect } from "react";
+import type { Field, FieldNode, FieldType, DocumentIdType, SavedConfiguration } from "@/types";
 import { buildFieldTree, calculateDocumentSize, formatBytes, calculateDocumentPathSize, calculateFieldsSize, getUtf8ByteLength } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { FieldList } from "./field-editor";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Button } from "@/components/ui/button";
+import { Save } from "lucide-react";
+import { SaveConfigurationDialog } from "./save-configuration-dialog";
+import { useLocalStorage } from "@/hooks/use-local-storage";
+import { SavedConfigurationsList } from "./saved-configurations";
 
 const INITIAL_FIELDS: Field[] = [
   { id: 's1', parentId: 'single', name: 'author', type: 'string', value: 'Jane Doe', size: 8 },
@@ -17,13 +22,28 @@ const INITIAL_FIELDS: Field[] = [
   { id: 'r2', parentId: 'repeated', name: 'likes', type: 'number', value: 10 },
 ];
 
-export default function FirestoreSizer() {
-  const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
-  const [multiplier, setMultiplier] = useState(1);
-  const [collectionPath, setCollectionPath] = useState("users/some_user_id/posts");
-  const [documentIdType, setDocumentIdType] = useState<DocumentIdType>("custom-string");
-  const [customDocumentId, setCustomDocumentId] = useState("my_post_id");
+const INITIAL_STATE = {
+  fields: INITIAL_FIELDS,
+  multiplier: 1,
+  collectionPath: "users/some_user_id/posts",
+  documentIdType: "custom-string" as DocumentIdType,
+  customDocumentId: "my_post_id",
+}
 
+export default function FirestoreSizer() {
+  const [fields, setFields] = useState<Field[]>(INITIAL_STATE.fields);
+  const [multiplier, setMultiplier] = useState(INITIAL_STATE.multiplier);
+  const [collectionPath, setCollectionPath] = useState(INITIAL_STATE.collectionPath);
+  const [documentIdType, setDocumentIdType] = useState<DocumentIdType>(INITIAL_STATE.documentIdType);
+  const [customDocumentId, setCustomDocumentId] = useState(INITIAL_STATE.customDocumentId);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+
+  const [savedConfigs, setSavedConfigs] = useLocalStorage<SavedConfiguration[]>('firestore-sizer-configs', []);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleUpdateField = (id: string, updates: Partial<Field>) => {
     setFields((prev) =>
@@ -79,7 +99,6 @@ export default function FirestoreSizer() {
           value: null,
           children: repeatedFieldsTree.map(f => ({
             ...f,
-            // ensure unique IDs within the constructed tree for calculations, though not strictly needed by logic
             id: `${f.id}-${i}`
           })),
         })),
@@ -94,7 +113,7 @@ export default function FirestoreSizer() {
 
   const documentId = useMemo(() => {
     if (documentIdType === 'auto') return 'ABCDEFGHIJKLMNOPQRST'; // 20 chars
-    if (documentIdType === 'custom-int') return '12345678'; // Example for size calc
+    if (documentIdType === 'custom-int') return '12345678';
     return customDocumentId;
   }, [documentIdType, customDocumentId]);
 
@@ -105,13 +124,11 @@ export default function FirestoreSizer() {
 
   const fullDocumentPath = useMemo(() => `${collectionPath}/${documentId}`, [collectionPath, documentId]);
 
-  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(fullDocumentPath) + 32, [fullDocumentPath]);
+  const documentDetailsSize = useMemo(() => calculateDocumentPathSize(collectionPath) + documentIdSize + 32, [collectionPath, documentIdSize]);
   const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
   const repeatedFieldsSize = useMemo(() => {
      if (multiplier > 0 && repeatedFieldsTree.length > 0) {
-       // Size of the wrapper array field name
        const arrayNameSize = "repeated_items".length + 1;
-       // Size of each map inside the array
        const singleMapSize = calculateFieldsSize(repeatedFieldsTree);
        return arrayNameSize + (singleMapSize * multiplier);
      }
@@ -128,8 +145,49 @@ export default function FirestoreSizer() {
     onAdd: handleAddField,
     onDelete: handleDeleteField,
   };
+  
+  const handleSaveConfiguration = (name: string) => {
+    const newConfig: SavedConfiguration = {
+      id: crypto.randomUUID(),
+      name,
+      timestamp: new Date().toISOString(),
+      config: {
+        fields,
+        multiplier,
+        collectionPath,
+        documentIdType,
+        customDocumentId,
+      },
+      totalSize,
+      fullDocumentPath,
+    };
+    setSavedConfigs([newConfig, ...savedConfigs]);
+  };
+
+  const handleLoadConfiguration = (configToLoad: SavedConfiguration) => {
+    const { config } = configToLoad;
+    setFields(config.fields);
+    setMultiplier(config.multiplier);
+    setCollectionPath(config.collectionPath);
+    setDocumentIdType(config.documentIdType);
+    setCustomDocumentId(config.customDocumentId);
+  };
+  
+  const handleDeleteConfiguration = (id: string) => {
+    setSavedConfigs(savedConfigs.filter(c => c.id !== id));
+  }
+
+  if (!isMounted) {
+    return null; // or a loading spinner
+  }
 
   return (
+    <>
+    <SaveConfigurationDialog
+        isOpen={isSaveDialogOpen}
+        onClose={() => setIsSaveDialogOpen(false)}
+        onSave={handleSaveConfiguration}
+      />
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
       <div className="lg:col-span-3 space-y-8">
         <Card>
@@ -144,7 +202,7 @@ export default function FirestoreSizer() {
                     <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateDocumentPathSize(collectionPath))}</div>
                   </div>
                   <Input id="collectionPath" value={collectionPath} onChange={e => setCollectionPath(e.target.value)} placeholder="e.g., users/user_id" />
-                  <p className="text-sm text-muted-foreground mt-1">The collection path leading to the document, e.g., `users/user_id`.</p>
+                  <p className="text-sm text-muted-foreground mt-1">The collection path leading to the document, e.g., `users/user_id/posts`.</p>
                 </div>
                  <div>
                     <div className="flex justify-between items-center mb-2">
@@ -173,7 +231,7 @@ export default function FirestoreSizer() {
                     <p className="text-sm text-muted-foreground mt-1">
                       {documentIdType === 'auto' && 'Firestore default 20-character string ID.'}
                       {documentIdType === 'custom-string' && 'A user-defined string ID.'}
-                      {documentIdType === 'custom-int' && 'An integer ID (not recommended).'}
+                      {documentIdType === 'custom-int' && 'An integer ID (not recommended). Stored as 8 bytes.'}
                     </p>
                 </div>
             </CardContent>
@@ -220,10 +278,27 @@ export default function FirestoreSizer() {
       </div>
 
       <div className="lg:col-span-2 space-y-8">
-        <div className="sticky top-8">
+        <div className="sticky top-8 space-y-8">
           <SizeVisualizer calculatedSize={totalSize} />
+           <Card>
+              <CardHeader>
+                  <CardTitle>Manage Configurations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <Button onClick={() => setIsSaveDialogOpen(true)} className="w-full">
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Current Configuration
+                  </Button>
+                  <SavedConfigurationsList
+                    configs={savedConfigs}
+                    onLoad={handleLoadConfiguration}
+                    onDelete={handleDeleteConfiguration}
+                  />
+              </CardContent>
+           </Card>
         </div>
       </div>
     </div>
+    </>
   );
 }

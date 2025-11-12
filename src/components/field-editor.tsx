@@ -45,7 +45,6 @@ const FieldRow = ({
   const isNameEditable = parentType !== "array";
 
   const fieldNode = React.useMemo(() => {
-    // We need to build a partial tree for this field to calculate its size
     const tree = buildFieldTree(allFields, field.parentId);
     return tree.find(f => f.id === field.id);
   }, [allFields, field.id, field.parentId]);
@@ -67,6 +66,18 @@ const FieldRow = ({
   const renderValueInput = () => {
     switch (field.type) {
       case "string":
+        return (
+          <Input
+            type="number"
+            required
+            min={0}
+            max={999999}
+            placeholder="String length (chars)"
+            value={field.size ?? ""}
+            onChange={handleSizeChange}
+            className="h-9"
+          />
+        );
       case "bytes":
         return (
           <Input
@@ -74,7 +85,7 @@ const FieldRow = ({
             required
             min={0}
             max={999999}
-            placeholder={field.type === 'string' ? "String length" : "Byte length"}
+            placeholder="Byte length"
             value={field.size ?? ""}
             onChange={handleSizeChange}
             className="h-9"
