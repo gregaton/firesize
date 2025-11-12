@@ -71,7 +71,9 @@ export function calculateFieldSize(field: FieldNode, isArrayElement = false): nu
 }
 
 export function calculateFieldsSize(fields: FieldNode[]): number {
-  return fields.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+  const result = fields.reduce((sum, field) => sum + calculateFieldSize(field), 0);
+  console.log("calculateFieldsSize for", fields, result)
+  return result;
 }
 
 

@@ -4,7 +4,7 @@ export type DocumentIdType = 'auto' | 'custom-string' | 'custom-int';
 
 export interface Field {
   id: string;
-  parentId: string; // 'single' for single fields, 'repeated' for repeated fields, or another field's id
+  parentId: string; // 'root' or another field's id
   name: string;
   type: FieldType;
   value: string | number | boolean | null;
@@ -17,7 +17,6 @@ export interface FieldNode extends Omit<Field, 'parentId'> {
 
 export type Configuration = {
   fields: Field[];
-  multiplier: number;
   collectionPath: string;
   documentIdType: DocumentIdType;
   customDocumentId: string;

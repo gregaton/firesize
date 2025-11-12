@@ -16,15 +16,12 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { SavedConfigurationsList } from "./saved-configurations";
 
 const INITIAL_FIELDS: Field[] = [
-  { id: 's1', parentId: 'single', name: 'author', type: 'string', value: 'Jane Doe', size: 8 },
-  { id: 's2', parentId: 'single', name: 'views', type: 'number', value: 12345 },
-  { id: 'r1', parentId: 'repeated', name: 'comment', type: 'string', value: 'This is an example comment.', size: 27 },
-  { id: 'r2', parentId: 'repeated', name: 'likes', type: 'number', value: 10 },
+  { id: 's1', parentId: 'root', name: 'author', type: 'string', value: 'Jane Doe', size: 8 },
+  { id: 's2', parentId: 'root', name: 'views', type: 'number', value: 12345 },
 ];
 
 const INITIAL_STATE: Configuration = {
   fields: INITIAL_FIELDS,
-  multiplier: 1,
   collectionPath: "users/some_user_id/posts",
   documentIdType: "custom-string" as DocumentIdType,
   customDocumentId: "my_post_id",
@@ -32,7 +29,6 @@ const INITIAL_STATE: Configuration = {
 
 export default function FirestoreSizer() {
   const [fields, setFields] = useState<Field[]>(INITIAL_STATE.fields);
-  const [multiplier, setMultiplier] = useState(INITIAL_STATE.multiplier);
   const [collectionPath, setCollectionPath] = useState(INITIAL_STATE.collectionPath);
   const [documentIdType, setDocumentIdType] = useState<DocumentIdType>(INITIAL_STATE.documentIdType);
   const [customDocumentId, setCustomDocumentId] = useState(INITIAL_STATE.customDocumentId);
@@ -117,34 +113,7 @@ export default function FirestoreSizer() {
   };
 
 
-  const singleFieldsTree = useMemo(() => buildFieldTree(fields, 'single'), [fields]);
-  const repeatedFieldsTree = useMemo(() => buildFieldTree(fields, 'repeated'), [fields]);
-
-  const documentTree: FieldNode[] = useMemo(() => {
-    if (multiplier > 0 && repeatedFieldsTree.length > 0) {
-      const repeatedItemsArray: FieldNode = {
-        id: 'repeated-items-array',
-        name: 'repeated_items',
-        type: 'array',
-        value: null,
-        children: Array.from({ length: multiplier }, (_, i) => ({
-          id: `map-item-${i}`,
-          name: '',
-          type: 'map',
-          value: null,
-          children: repeatedFieldsTree.map(f => ({
-            ...f,
-            id: `${f.id}-${i}`
-          })),
-        })),
-        size: multiplier
-      };
-      return [...singleFieldsTree, repeatedItemsArray];
-    }
-    
-    return singleFieldsTree;
-
-  }, [singleFieldsTree, repeatedFieldsTree, multiplier]);
+  const documentTree = useMemo(() => buildFieldTree(fields, 'root'), [fields]);
 
   const documentId = useMemo(() => {
     if (documentIdType === 'auto') return 'ABCDEFGHIJKLMNOPQRST'; // 20 chars
@@ -181,7 +150,6 @@ export default function FirestoreSizer() {
   const handleSaveConfiguration = (name: string, isOverwrite: boolean) => {
     const configToSave: Configuration = {
       fields,
-      multiplier,
       collectionPath,
       documentIdType,
       customDocumentId,
@@ -198,21 +166,37 @@ export default function FirestoreSizer() {
       fullDocumentPath,
     };
 
-    if (existingConfigIndex !== -1) {
-      // Overwrite existing config
-       const newConfigs = [...savedConfigs];
-       newConfigs[existingConfigIndex] = newSavedConfig;
-       setSavedConfigs(newConfigs);
+    if (isOverwrite) {
+      if (existingConfigIndex !== -1) {
+        // Overwrite existing config
+         const newConfigs = [...savedConfigs];
+         newConfigs[existingConfigIndex] = newSavedConfig;
+         setSavedConfigs(newConfigs);
+      } else {
+         // This case should ideally not happen if logic is correct in dialog
+         setSavedConfigs([newSavedConfig, ...savedConfigs]);
+      }
     } else {
-      // Add new config
-      setSavedConfigs([newSavedConfig, ...savedConfigs]);
+        if (existingConfigIndex !== -1) {
+            // This is an edit of an existing config, but with a new name.
+            // So we update the original one.
+            const originalConfig = savedConfigs.find(c => c.id === editingConfig?.id);
+            if(originalConfig) {
+                const newConfigs = savedConfigs.map(c => c.id === editingConfig?.id ? newSavedConfig : c);
+                setSavedConfigs(newConfigs);
+            } else {
+                setSavedConfigs([newSavedConfig, ...savedConfigs]);
+            }
+        } else {
+            // Add new config
+            setSavedConfigs([newSavedConfig, ...savedConfigs]);
+        }
     }
   };
 
   const handleLoadConfiguration = (configToLoad: SavedConfiguration) => {
     const { config } = configToLoad;
     setFields(config.fields);
-    setMultiplier(config.multiplier);
     setCollectionPath(config.collectionPath);
     setDocumentIdType(config.documentIdType);
     setCustomDocumentId(config.customDocumentId);
@@ -291,38 +275,12 @@ export default function FirestoreSizer() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Fields</CardTitle>
-            <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateFieldsSize(singleFieldsTree))}</div>
+            <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateFieldsSize(documentTree))}</div>
           </CardHeader>
           <CardContent>
             <FieldList
               allFields={fields}
-              parentId="single"
-              {...fieldHandlers}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Repeated Fields</CardTitle>
-             <div className="text-sm font-medium text-muted-foreground">{formatBytes(multiplier > 0 ? calculateFieldsSize(documentTree.filter(f => f.id === 'repeated-items-array')) : 0)}</div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="multiplier">Number of repeated entries</Label>
-              <Input
-                id="multiplier"
-                type="number"
-                min="0"
-                value={multiplier}
-                onChange={(e) => setMultiplier(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              />
-            </div>
-            <p className="text-sm text-muted-foreground !mt-2">
-              Fields defined below will be placed inside an array of maps. The array field is named `repeated_items`.
-            </p>
-            <FieldList
-              allFields={fields}
-              parentId="repeated"
+              parentId="root"
               {...fieldHandlers}
             />
           </CardContent>
