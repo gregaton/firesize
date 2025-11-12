@@ -27,7 +27,7 @@ import { SavedConfiguration } from "@/types";
 interface SaveConfigurationDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string, id?: string) => void;
+  onSave: (name: string, isOverwrite: boolean) => void;
   existingNames: string[];
   editingConfig: SavedConfiguration | null;
 }
@@ -41,10 +41,13 @@ export function SaveConfigurationDialog({
 }: SaveConfigurationDialogProps) {
   const [name, setName] = useState("");
   const [showOverwriteAlert, setShowOverwriteAlert] = useState(false);
+  const [originalName, setOriginalName] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setName(editingConfig?.name || "");
+      const initialName = editingConfig?.name || "";
+      setName(initialName);
+      setOriginalName(initialName);
     }
   }, [isOpen, editingConfig]);
 
@@ -52,20 +55,20 @@ export function SaveConfigurationDialog({
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    const isEditing = !!editingConfig;
-    const isNameTaken = existingNames.includes(trimmedName);
+    // Check if the name exists and it's not the original name of the config we are editing
+    const isNameTaken = existingNames.includes(trimmedName) && trimmedName !== originalName;
 
-    if (isNameTaken && (!isEditing || (isEditing && editingConfig.name !== trimmedName))) {
+    if (isNameTaken) {
       setShowOverwriteAlert(true);
     } else {
-      handleConfirmSave();
+      handleConfirmSave(false);
     }
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = (isOverwrite: boolean) => {
     const trimmedName = name.trim();
     if (trimmedName) {
-      onSave(trimmedName, editingConfig?.id);
+      onSave(trimmedName, isOverwrite);
       onCloseAndReset();
     }
   };
@@ -73,6 +76,7 @@ export function SaveConfigurationDialog({
   const onCloseAndReset = () => {
     setShowOverwriteAlert(false);
     setName("");
+    setOriginalName(null);
     onClose();
   };
 
@@ -121,7 +125,7 @@ export function SaveConfigurationDialog({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setShowOverwriteAlert(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSave}>Overwrite</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleConfirmSave(true)}>Overwrite</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

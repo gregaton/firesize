@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import type { Field, FieldNode, FieldType, DocumentIdType, SavedConfiguration } from "@/types";
-import { buildFieldTree, calculateDocumentSize, formatBytes, getUtf8ByteLength } from "@/lib/firestore-size";
+import type { Field, FieldNode, FieldType, DocumentIdType, SavedConfiguration, Configuration } from "@/types";
+import { buildFieldTree, calculateDocumentSize, calculateFieldsSize, formatBytes, getUtf8ByteLength } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ const INITIAL_FIELDS: Field[] = [
   { id: 'r2', parentId: 'repeated', name: 'likes', type: 'number', value: 10 },
 ];
 
-const INITIAL_STATE = {
+const INITIAL_STATE: Configuration = {
   fields: INITIAL_FIELDS,
   multiplier: 1,
   collectionPath: "users/some_user_id/posts",
@@ -178,8 +178,8 @@ export default function FirestoreSizer() {
     onDelete: handleDeleteField,
   };
   
-  const handleSaveConfiguration = (name: string, id?: string) => {
-    const configToSave = {
+  const handleSaveConfiguration = (name: string, isOverwrite: boolean) => {
+    const configToSave: Configuration = {
       fields,
       multiplier,
       collectionPath,
@@ -187,24 +187,25 @@ export default function FirestoreSizer() {
       customDocumentId,
     };
   
-    if (id) {
+    const existingConfigIndex = savedConfigs.findIndex(c => c.name === name);
+    
+    const newSavedConfig: SavedConfiguration = {
+      id: existingConfigIndex !== -1 ? savedConfigs[existingConfigIndex].id : crypto.randomUUID(),
+      name,
+      timestamp: new Date().toISOString(),
+      config: configToSave,
+      totalSize,
+      fullDocumentPath,
+    };
+
+    if (existingConfigIndex !== -1) {
       // Overwrite existing config
-      setSavedConfigs(savedConfigs.map(c => 
-        c.id === id 
-        ? { ...c, name, config: configToSave, totalSize, fullDocumentPath, timestamp: new Date().toISOString() } 
-        : c
-      ));
+       const newConfigs = [...savedConfigs];
+       newConfigs[existingConfigIndex] = newSavedConfig;
+       setSavedConfigs(newConfigs);
     } else {
       // Add new config
-      const newConfig: SavedConfiguration = {
-        id: crypto.randomUUID(),
-        name,
-        timestamp: new Date().toISOString(),
-        config: configToSave,
-        totalSize,
-        fullDocumentPath,
-      };
-      setSavedConfigs([newConfig, ...savedConfigs]);
+      setSavedConfigs([newSavedConfig, ...savedConfigs]);
     }
   };
 
