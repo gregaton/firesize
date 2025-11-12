@@ -104,15 +104,11 @@ export function calculateDocumentPathSize(fullPath: string): number {
 
 
 export function calculateDocumentSize(documentPath: string, fields: FieldNode[]): number {
-  const segments = documentPath.split('/').filter(p => p);
-  const collectionPath = segments.slice(0, -1).join('/');
-  const documentId = segments.slice(-1)[0] || '';
-
-  // The size of the document name is the full path + doc id + null terminator
-  const documentNameSize = getUtf8ByteLength(collectionPath) 
-      + (collectionPath ? 1 : 0) // Separator if collection path exists
-      + getUtf8ByteLength(documentId) + 1;
-
+  // The size of the document name is the full path + 16 bytes for the project/db info + 1 for null terminator.
+  // This part is an estimation as we don't have the project/db IDs.
+  // Let's assume an overhead of 16 for project/db, and then add the path.
+  const documentNameSize = getUtf8ByteLength(documentPath) + 16 + 1;
+  
   const fieldsSize = calculateFieldsSize(fields);
   
   // Total size is document name size + fields size + 32 bytes document overhead

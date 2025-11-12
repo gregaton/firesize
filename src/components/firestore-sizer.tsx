@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import type { Field, FieldNode, FieldType, DocumentIdType, SavedConfiguration } from "@/types";
-import { buildFieldTree, calculateDocumentSize, formatBytes, calculateDocumentPathSize, calculateFieldsSize, getUtf8ByteLength } from "@/lib/firestore-size";
+import { buildFieldTree, calculateDocumentSize, formatBytes, getUtf8ByteLength } from "@/lib/firestore-size";
 import SizeVisualizer from "./size-visualizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -149,27 +149,23 @@ export default function FirestoreSizer() {
   const documentId = useMemo(() => {
     if (documentIdType === 'auto') return 'ABCDEFGHIJKLMNOPQRST'; // 20 chars
     if (documentIdType === 'custom-int') return '12345678';
-    return customDocumentId;
+    return customDocumentId || "";
   }, [documentIdType, customDocumentId]);
+
+  const fullDocumentPath = useMemo(() => `${collectionPath}/${documentId}`.replace(/^\/|\/$/g, ''), [collectionPath, documentId]);
+
+  const pathSize = useMemo(() => {
+    const segments = collectionPath.split('/').filter(p => p.length > 0);
+    const pathBytes = segments.reduce((sum, segment) => sum + getUtf8ByteLength(segment) + 1, 0);
+    return pathBytes + 16;
+  }, [collectionPath]);
 
   const documentIdSize = useMemo(() => {
       if (documentIdType === 'custom-int') return 8;
       return getUtf8ByteLength(documentId) + 1;
   }, [documentId, documentIdType]);
 
-  const fullDocumentPath = useMemo(() => `${collectionPath}/${documentId}`, [collectionPath, documentId]);
-
-  const pathSize = useMemo(() => calculateDocumentPathSize(collectionPath), [collectionPath]);
-  const documentDetailsSize = useMemo(() => pathSize + documentIdSize + 32, [pathSize, documentIdSize]);
-  const singleFieldsSize = useMemo(() => calculateFieldsSize(singleFieldsTree), [singleFieldsTree]);
-  const repeatedFieldsSize = useMemo(() => {
-     if (multiplier > 0 && repeatedFieldsTree.length > 0) {
-       const arrayNameSize = getUtf8ByteLength("repeated_items") + 1;
-       const singleMapSize = calculateFieldsSize(repeatedFieldsTree);
-       return arrayNameSize + (singleMapSize * multiplier);
-     }
-     return 0;
-  }, [repeatedFieldsTree, multiplier]);
+  const documentDetailsSize = pathSize + documentIdSize + 32;
 
   const totalSize = useMemo(() => {
     return calculateDocumentSize(fullDocumentPath, documentTree);
@@ -294,7 +290,7 @@ export default function FirestoreSizer() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Fields</CardTitle>
-            <div className="text-sm font-medium text-muted-foreground">{formatBytes(singleFieldsSize)}</div>
+            <div className="text-sm font-medium text-muted-foreground">{formatBytes(calculateFieldsSize(singleFieldsTree))}</div>
           </CardHeader>
           <CardContent>
             <FieldList
@@ -307,7 +303,7 @@ export default function FirestoreSizer() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Repeated Fields</CardTitle>
-             <div className="text-sm font-medium text-muted-foreground">{formatBytes(repeatedFieldsSize)}</div>
+             <div className="text-sm font-medium text-muted-foreground">{formatBytes(multiplier > 0 ? calculateFieldsSize(documentTree.filter(f => f.id === 'repeated-items-array')) : 0)}</div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
